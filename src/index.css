@@ -1,0 +1,84 @@
+import React, { useEffect, useRef, useState } from 'react';
+
+const BlowDetector = () => {
+  const [isBlowing, setIsBlowing] = useState(false);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const dataArrayRef = useRef(null);
+  const microphoneRef = useRef(null);
+  const animationFrameRef = useRef(null);
+
+  useEffect(() => {
+    const initBlowDetection = async () => {
+      try {
+        // Access the microphone
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Create an audio context and analyser
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(stream);
+
+        // Configure analyser
+        analyser.fftSize = 2048;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        // Store references
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+        dataArrayRef.current = dataArray;
+        microphoneRef.current = microphone;
+
+        // Connect microphone to analyser
+        microphone.connect(analyser);
+
+        // Start detection
+        detectBlow();
+      } catch (error) {
+        console.error("Error accessing microphone:", error);
+      }
+    };
+
+    const detectBlow = () => {
+      if (analyserRef.current && dataArrayRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+
+        // Analyze low-frequency energy
+        let lowFrequencyEnergy = 0;
+        for (let i = 0; i < dataArrayRef.current.length; i++) {
+          if (i < 100) { // Low-frequency range
+            lowFrequencyEnergy += dataArrayRef.current[i];
+          }
+        }
+
+        // Threshold for blowing
+        const blowThreshold = 5000; // Adjust this value
+        setIsBlowing(lowFrequencyEnergy > blowThreshold);
+      }
+
+      // Schedule the next detection
+      animationFrameRef.current = requestAnimationFrame(detectBlow);
+    };
+
+    initBlowDetection();
+
+    return () => {
+      // Cleanup resources
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div>
+      <h1>Blow Detector</h1>
+      <p>Status: {isBlowing ? "Blowing detected!" : "No blowing detected."}</p>
+    </div>
+  );
+};
+
+export default BlowDetector;
